@@ -11,62 +11,81 @@ import (
 // generate small bigints, converting them to int64 and then converting to int
 // for the polynomial. Obiously my polynomial should really be bigints, but this
 // is just for POC at the moment.
-const PRIME = 19
+// TODO: should this be a big int? and also how does randomness work in that
+// case?
+const PRIME = 5
 
 // TODO: maybe split this up so main just does the shamir stuff, while the
 // polynomial manipulation is a separate package
 
-// TODO: make polynomial slice of bigints, not ints.
-// A polynomial is a slice of 64-bit numbers. E.g. 7x^2 + 5 is [5, 0, 7]
-// These can be ints since it is field arithmetic
+// A polynomial is a slice of big.Ints. E.g. 7x^2 + 5 is [5, 0, 7]
 type polynomial struct {
-	coefficients []int
+	coefficients []*big.Int
 }
 
+// Formats the polynomial so we can print [5, 0, 7] as 7x^2 + 5.
+// TODO: more edge cases of [0, 0, 0 , 2] and [1, 0, 0, 0], etc. Even though in
+// SSS they won't ever be hit because the secret can't be 0 and the polynomial
+// of degree n can't have x^n coefficent equal to 0.
+// also I just hate how ugly this method is
 func (p polynomial) format() string {
 	degree := len(p.coefficients) - 1
-	str := ""
-	for i := degree; i >= 0; i-- {
-		coeff := strconv.Itoa(p.coefficients[i])
+    str := ""
+    coeff := p.coefficients[degree].String()
+    if !((coeff == "0") || (coeff == "1"))  {
+        str = coeff + "x^" + strconv.Itoa(degree)
+    } else if (coeff == "1") {
+        str = "x"
+    } else {
+        str = ""
+    }
+	for i := degree - 1; i >= 0; i-- {
+		coeff := p.coefficients[i].String()
 		if coeff == "0" {
 			continue
 		}
-        if coeff == "1" {
-            coeff = ""
+        if ((coeff == "1") && i != 0) {
+            coeff = " + " + ""
         }
 		switch i {
 		case 0:
-			str += coeff
+            if coeff == "1" {
+                str += " + " + coeff
+            } else {
+			str += " + " + coeff
+            }
 		case 1:
-			str += coeff + "x" + " + "
+			str += " + " + coeff + "x"
 		default:
-			str += coeff + "x^" + strconv.Itoa(i) + " + "
+			str += " + " + coeff + "x^" + strconv.Itoa(i)
 		}
 	}
 	return str
 }
 
-// TODO: write a funcction to generate a random polynomial of degree m (m = k
-// -1) for sss threshold
-func generateRandomPolynomial(constant, degree, modulus int) polynomial {
-    var coeffs []int
+// For SSS:
+// constant = secret to split up
+// degree (of polynomial) = shares to split up
+// modulus = PRIME for the field arithmetic
+//TODO: I should just have logic at the start saying degree has to ve >=
+func generateRandomPolynomial(constant *big.Int, degree, modulus int) polynomial {
+    var coeffs []*big.Int
     coeffs = append(coeffs, constant)
 	for i := 1; i < degree; i++ {
         num, err := rand.Int(rand.Reader, big.NewInt(PRIME))
-//        if i == degree {
-//            for ok := true; ok; ok != (num.String() == "0") {
-//                num, err := rand.Int(rand.Reader, big.NewInt(27))
-//            }
         if err != nil {
             panic(err)
         }
-        coeffs = append(coeffs, int(num.Int64()))
+        coeffs = append(coeffs, num)
     }
-    var number int
+    var number *big.Int
     for {
-        num, _ := rand.Int(rand.Reader, big.NewInt(PRIME))
-        number = int(num.Int64())
-        if number != 0 {
+        num, err := rand.Int(rand.Reader, big.NewInt(PRIME))
+        if err != nil {
+            panic(err)
+        }
+        number = num
+        if number.Cmp(big.NewInt(0)) != 0 {
             break
         }
     }
@@ -78,9 +97,20 @@ func generateRandomPolynomial(constant, degree, modulus int) polynomial {
 
 //func (poly Polynomial)
 
-// TODO: function to evaluate polynomial, write tests for it
-//func evaluatePolynomial(x int, p polynomial) int {
-//}
+// Evaluates polynomial
+// Write some tests
+func evaluatePolynomial(x, modulus *big.Int, p polynomial) *big.Int {
+    degree := len(p.coefficients) - 1
+    result := big.NewInt(0)
+    term := big.NewInt(0)
+	for e := degree; e >= 0; e-- {
+        term.Exp(x, big.NewInt(int64(e)), nil)
+        fmt.Println(term)
+        term.Mul(term, p.coefficients[e])
+        result.Add(result, term)
+    }
+    return result.Mod(result, modulus)
+}
 
 // TODO: function to give each person a point (x and evaluatePolynomial(x)
 
@@ -104,11 +134,16 @@ func main() {
 	n := nBig.Int64()
 	fmt.Printf("Here is a random %T in [0,27) : %d\n", n, n)
 
-	letters := polynomial{[]int{2, 4, 3, 0, 2}}
+	letters := polynomial{[]*big.Int{big.NewInt(2), big.NewInt(4), big.NewInt(3), big.NewInt(0), big.NewInt(2)}}
 	fmt.Println(len([]int{1, 3, 4, 4, 4}))
 	fmt.Println(letters.format())
 
+    x := big.NewInt(2)
+    modulus := big.NewInt(17)
+    result := evaluatePolynomial(x, modulus, letters)
+    fmt.Println(result)
 
-    new_letters := generateRandomPolynomial(11, 5, PRIME)
+
+    new_letters := generateRandomPolynomial(big.NewInt(11), 5, PRIME)
     fmt.Println(new_letters.format())
 }

@@ -3,20 +3,25 @@ package main
 import (
     "testing"
     "fmt"
+    "math/big"
 )
 
-// TODO: write this to test that e.g. the polynomial [5, 3, 0, 2] is printed
-// correctly as 2x^3 + 3x + 5
 func TestFormat(t *testing.T) {
-	// t.Fatal("not implemented")
-    p := polynomial{[]int{2, 4, 3, 0, 2}}
+    p := polynomial{[]*big.Int{big.NewInt(2), big.NewInt(4), big.NewInt(3), big.NewInt(0), big.NewInt(2)}}
     fmt.Println(p)
-    result := "x"
-    result = p.format()
+    result := p.format()
     if result != "2x^4 + 3x^2 + 4x + 2" {
         t.Errorf("expecting 2x^4 + 3x^2 + 4x + 2, got %s", result)
     }
+
+    p = polynomial{[]*big.Int{big.NewInt(1), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(7)}}
+    result = p.format()
+    if result != "7x^4 + 1" {
+        t.Errorf("expecting 7x^4 + 1, got %s", result)
+    }
 }
+
+// TODO: write function to evaluate polynomial
 
 /*
 func TestProblem10(t *testing.T) {
