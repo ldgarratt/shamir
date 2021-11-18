@@ -19,6 +19,18 @@ func TestFormat(t *testing.T) {
     if result != "7x^4 + 1" {
         t.Errorf("expecting 7x^4 + 1, got %s", result)
     }
+
+    p = polynomial{[]*big.Int{big.NewInt(1), big.NewInt(1), big.NewInt(5), big.NewInt(0), big.NewInt(0)}}
+    result = p.format()
+    if result != "5x^2 + x + 1" {
+        t.Errorf("expecting 5x^2 + x + 1, got %s", result)
+    }
+
+    p = polynomial{[]*big.Int{big.NewInt(0), big.NewInt(1), big.NewInt(5), big.NewInt(0), big.NewInt(0)}}
+    result = p.format()
+    if result != "5x^2 + x" {
+        t.Errorf("expecting 5x^2 + x, got %s", result)
+    }
 }
 
 // TODO: write function to evaluate polynomial

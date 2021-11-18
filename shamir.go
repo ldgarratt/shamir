@@ -3,8 +3,9 @@ package main
 import (
 	"crypto/rand"
 	"fmt"
+    "log"
 	"math/big"
-	"strconv"
+    "strconv"
 )
 
 // TODO: currently this is a tiny prime and I'm crazily using crypto/rand to
@@ -23,43 +24,63 @@ type polynomial struct {
 	coefficients []*big.Int
 }
 
-// Formats the polynomial so we can print [5, 0, 7] as 7x^2 + 5.
-// TODO: more edge cases of [0, 0, 0 , 2] and [1, 0, 0, 0], etc. Even though in
-// SSS they won't ever be hit because the secret can't be 0 and the polynomial
-// of degree n can't have x^n coefficent equal to 0.
-// also I just hate how ugly this method is
+// Formats the polynomial so we can print e.g. [5, 0, 7] as 7x^2 + 5.
 func (p polynomial) format() string {
 	degree := len(p.coefficients) - 1
-    str := ""
-    coeff := p.coefficients[degree].String()
-    if !((coeff == "0") || (coeff == "1"))  {
-        str = coeff + "x^" + strconv.Itoa(degree)
-    } else if (coeff == "1") {
-        str = "x"
-    } else {
-        str = ""
+    if degree < 2 {
+        // TODO: add the tedious cases just for fun
+        log.Fatal("Polynomial too small\n")
     }
-	for i := degree - 1; i >= 0; i-- {
-		coeff := p.coefficients[i].String()
-		if coeff == "0" {
-			continue
-		}
-        if ((coeff == "1") && i != 0) {
-            coeff = " + " + ""
+    final_term := p.coefficients[degree].String()
+
+    // If its not actually an nth degree polynomial because the x^n term is 0,
+    // then recursiely apply the method on the actual (n-1)th degree polynomial
+    if final_term == "0" {
+        var new_poly []*big.Int
+        for i := 0; i <= degree - 2; i++ {
+            new_poly = append(new_poly, p.coefficients[i])
         }
-		switch i {
-		case 0:
-            if coeff == "1" {
-                str += " + " + coeff
-            } else {
-			str += " + " + coeff
-            }
-		case 1:
-			str += " + " + coeff + "x"
-		default:
-			str += " + " + coeff + "x^" + strconv.Itoa(i)
-		}
-	}
+        p = polynomial{new_poly}
+        return p.format()
+    }
+
+    str := ""
+    // The const term is always non-zero, otherwise add logic for this case
+    constant_term := p.coefficients[0].String()
+    if constant_term != "0" {
+        str = " + " + constant_term
+    }
+
+    // x term of polynomial
+    x_term := p.coefficients[1].String()
+    switch x_term {
+        case "0":
+        case "1":
+            str = " + " + "x" + str
+        default:
+            str = " + " + x_term + "x" + str
+    }
+
+    // middle part of polynomial
+    for i := 2; i < degree; i++ {
+        coeff := p.coefficients[i].String()
+        switch coeff {
+        case "0":
+            continue
+        case "1":
+            str = " + " + "x^" + strconv.Itoa(i) + str
+        default:
+            str = " + " + coeff + "x^" + strconv.Itoa(i) + str
+        }
+    }
+
+    // Final term must be non-zero, otherwise it's not a polynomial of that
+    // degree
+    if final_term == "1" {
+        final_term = ""
+    }
+    str = final_term + "x^" + strconv.Itoa(degree) + str
+
 	return str
 }
 
