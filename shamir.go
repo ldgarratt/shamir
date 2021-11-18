@@ -150,6 +150,29 @@ func shamirSplitSecret(secret *big.Int, n, t int) []*big.Int {
     return shares
 }
 
+/*
+func lagrange(points map[int]big.Int, modulus *big.Int) int {
+// Calculates f(0) % p gien points when len(points) >= threshold
+
+    result := big.NewInt(0)
+
+    // Points are the secret shares (x1, y1), (x2, y2), etc on the polynomial.
+    for x, y := range points {
+        // For testing:
+
+        fmt.Printf("Intermediate calculuation is %i * %i = %i", a, b, c)
+    }
+
+    term := big.NewInt(0)
+	for e := degree; e >= 0; e-- {
+        term.Exp(x, big.NewInt(int64(e)), nil)
+        term.Mul(term, p.coefficients[e])
+        result.Add(result, term)
+    }
+    return result.Mod(result, modulus)
+
+}
+*/ 
 
 // TODO: make the function say "Welcome to Shamir's secret sharing scheme! What
 // is your secret you wish to split?
@@ -160,6 +183,7 @@ func shamirSplitSecret(secret *big.Int, n, t int) []*big.Int {
 
 // in future, hae a command line option too.
 func main() {
+
 
     secret := big.NewInt(100)
     people := 5
@@ -175,12 +199,21 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+
 	n := nBig.Int64()
 	fmt.Printf("Here is a random %T in [0,27) : %d\n", n, n)
 
 	letters := polynomial{[]*big.Int{big.NewInt(2), big.NewInt(4), big.NewInt(3), big.NewInt(0), big.NewInt(2)}}
 	fmt.Println(len([]int{1, 3, 4, 4, 4}))
 	fmt.Println(letters.format())
+
+
+    m := make(map[int]big.Int)
+	m[2] = *big.NewInt(1942)
+    for k, v := range m {
+        fmt.Println(k, "value is", v)
+    }
 
     x := big.NewInt(2)
     modulus := big.NewInt(17)
