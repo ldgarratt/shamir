@@ -150,29 +150,45 @@ func shamirSplitSecret(secret *big.Int, n, t int) []*big.Int {
     return shares
 }
 
-/*
-func lagrange(points map[int]big.Int, modulus *big.Int) int {
+
 // Calculates f(0) % p gien points when len(points) >= threshold
-
+// Points are the secret shares (x1, y1), (x2, y2), etc on the polynomial.
+func lagrange(points map[int]big.Int, modulus *big.Int) int {
     result := big.NewInt(0)
+    k := len(points)
 
-    // Points are the secret shares (x1, y1), (x2, y2), etc on the polynomial.
+
+    // This part is the outer sum of the Lagrange formula. At each iteration, it
+    // adds the y term to the product. The product is calculated in the other
+    // inner loop.
     for x, y := range points {
-        // For testing:
+        prod := big.NewInt(1)
 
+        // At each iteration, this calculates the product in the Lagrange
+        // formula.
+        for m, _ in range points {
+            if m == x {
+                continue
+            }
+            d := big.NewInt(0).sub(m, x)
+            frac := big.NewInt(0).div(m, d)
+            prod.Mul(prod, frac)
+        }
+
+        // We now have the product for this term in the sum. Multiply it by y.
+        // Then add to the sum total. Repeat until the sum is complete.
+
+        // TODO: add print statements to test this stuff
+        term := big.NewInt(0).Mul(y, prod)
+        result = result.add(result, term)
+
+
+        frac.Div()
+        term.Mul(term
         fmt.Printf("Intermediate calculuation is %i * %i = %i", a, b, c)
     }
-
-    term := big.NewInt(0)
-	for e := degree; e >= 0; e-- {
-        term.Exp(x, big.NewInt(int64(e)), nil)
-        term.Mul(term, p.coefficients[e])
-        result.Add(result, term)
-    }
-    return result.Mod(result, modulus)
-
+    return result
 }
-*/ 
 
 // TODO: make the function say "Welcome to Shamir's secret sharing scheme! What
 // is your secret you wish to split?
@@ -183,6 +199,11 @@ func lagrange(points map[int]big.Int, modulus *big.Int) int {
 
 // in future, hae a command line option too.
 func main() {
+    fmt.Println("Welcome to Shamir's secret sharing scheme!\n What is the secret (in integer form) you would like to split?")
+    // TODO: logic to ensure its an integer, parsed as big.Int
+    fmt.Println("How many shares of the secret would you like to split it into?")
+    // TODO: logic to ensure is int
+    fmt.Println("What is the threshold of shares needed to combine to derive the secret?")
 
 
     secret := big.NewInt(100)
