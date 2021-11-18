@@ -2,13 +2,12 @@ package main
 
 import (
     "testing"
-    "fmt"
     "math/big"
+    "fmt"
 )
 
 func TestFormat(t *testing.T) {
     p := polynomial{[]*big.Int{big.NewInt(2), big.NewInt(4), big.NewInt(3), big.NewInt(0), big.NewInt(2)}}
-    fmt.Println(p)
     result := p.format()
     if result != "2x^4 + 3x^2 + 4x + 2" {
         t.Errorf("expecting 2x^4 + 3x^2 + 4x + 2, got %s", result)
@@ -33,19 +32,16 @@ func TestFormat(t *testing.T) {
     }
 }
 
-// TODO: write function to evaluate polynomial
 
-/*
-func TestProblem10(t *testing.T) {
-	msg := []byte("YELLOW SUBMARINEYELLOW SUBMARINE")
-	iv := make([]byte, 16)
-	b, _ := aes.NewCipher([]byte("YELLOW SUBMARINE"))
-	res := decryptCBC(encryptCBC(msg, b, iv), b, iv)
-	if !bytes.Equal(res, msg) {
-		t.Errorf("%q", res)
-	}
-
-	msg = decodeBase64(t, string(readFile(t, "10.txt")))
-	t.Logf("%s", decryptCBC(msg, b, iv))
+// TODO: add a test for a polynomial with edge conditions
+func TestEvaluatePolynomial(t *testing.T) {
+    p := polynomial{[]*big.Int{big.NewInt(2), big.NewInt(4), big.NewInt(3), big.NewInt(0), big.NewInt(2)}}
+    x := big.NewInt(3)
+    modulus := big.NewInt(17)
+    result := evaluatePolynomial(x, modulus, p)
+    fmt.Println(result)
+    if result.Cmp(big.NewInt(16)) != 0 {
+        t.Errorf("Expecting 3, %s", result.String())
+    }
 }
-*/
+
