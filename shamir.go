@@ -116,24 +116,40 @@ func generateRandomPolynomial(constant *big.Int, degree, modulus int) polynomial
     return polynomial{coeffs}
 }
 
-//func (poly Polynomial)
-
-// Evaluates polynomial
-// Write some tests
+// Evaluates galois polynomial at x
 func evaluatePolynomial(x, modulus *big.Int, p polynomial) *big.Int {
     degree := len(p.coefficients) - 1
     result := big.NewInt(0)
     term := big.NewInt(0)
 	for e := degree; e >= 0; e-- {
         term.Exp(x, big.NewInt(int64(e)), nil)
-        fmt.Println(term)
         term.Mul(term, p.coefficients[e])
         result.Add(result, term)
     }
     return result.Mod(result, modulus)
 }
 
-// TODO: function to give each person a point (x and evaluatePolynomial(x)
+// Shamir Secret Sharing splitting secret into n shares with threshold t to
+// recover the secret.
+// TODO: test this function.. perhaps a hidden version with a fixed polynomial for
+// better end-to-end testing? Then the real version generates a random
+// polynomial and just calls the fixed polynomial version
+func shamirSplitSecret(secret *big.Int, n, t int) []*big.Int {
+    var shares []*big.Int
+    // TODO: make this a fixed polynomial for initial testing
+    poly := generateRandomPolynomial(secret, t - 1, PRIME)
+    fmt.Printf("The Shamir polynomial is: %s (mod %d)\n", poly.format(), PRIME)
+    fmt.Printf("The individual shares are:\n")
+    for x := 1; x <= t; x ++ {
+        // TODO: my PRIME should itself be a big.Int already, really.
+        // I really do not like casting of x crap we're doing here
+        shares = append(shares, evaluatePolynomial(big.NewInt(int64(x)), big.NewInt(PRIME), poly))
+        fmt.Printf("Person %d: share: (%d, %d)\n", x, x, shares[x - 1])
+    }
+    fmt.Println(shares)
+    return shares
+}
+
 
 // TODO: make the function say "Welcome to Shamir's secret sharing scheme! What
 // is your secret you wish to split?
@@ -144,6 +160,13 @@ func evaluatePolynomial(x, modulus *big.Int, p polynomial) *big.Int {
 
 // in future, hae a command line option too.
 func main() {
+
+    secret := big.NewInt(100)
+    people := 5
+    t := 3
+    shares := shamirSplitSecret(secret, people, t)
+    fmt.Println(shares)
+
 
     bigint := big.NewInt(123)
     fmt.Println(bigint)
