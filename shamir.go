@@ -1,25 +1,21 @@
 package main
 
 import (
+    "encoding/base64"
 	"crypto/rand"
+    "flag"
 	"fmt"
     "log"
 	"math/big"
+    "os"
     "strconv"
 )
-
-// TODO: currently this is a tiny prime and I'm crazily using crypto/rand to
-// generate small bigints, converting them to int64 and then converting to int
-// for the polynomial. Obiously my polynomial should really be bigints, but this
-// is just for POC at the moment.
-// TODO: should this be a big int? and also how does randomness work in that
-// case?
-const PRIME = 5
 
 // TODO: maybe split this up so main just does the shamir stuff, while the
 // polynomial manipulation is a separate package
 
-// A polynomial is a slice of big.Ints. E.g. 7x^2 + 5 is [5, 0, 7]
+// A polynomial is a slice of big.Ints. polynomial[i] is the x^i coefficient.
+// E.g. 7x^2 + 5 is [5, 0, 7].
 type polynomial struct {
 	coefficients []*big.Int
 }
@@ -27,32 +23,51 @@ type polynomial struct {
 // Formats the polynomial so we can print e.g. [5, 0, 7] as 7x^2 + 5.
 func (p polynomial) format() string {
 	degree := len(p.coefficients) - 1
-    if degree < 2 {
-        // TODO: add the tedious cases just for fun
-        log.Fatal("Polynomial too small\n")
-    }
-    final_term := p.coefficients[degree].String()
 
+    if degree <= -1 {
+        log.Fatal("Empty polynomial\n")
+    }
+
+    if degree == 0 {
+        return p.coefficients[0].String()
+    }
+
+    const_term := p.coefficients[0].String()
+    x_term := p.coefficients[1].String()
+
+    if degree == 1 {
+        if x_term == "1" && const_term == "0" {
+            return "x"
+        }
+        if x_term == "1" && const_term != "0" {
+            return "x + " + const_term
+        }
+        if x_term == "0" {
+            return const_term
+        }
+        return x_term + "x + " + const_term
+    }
+
+    final_term := p.coefficients[degree].String()
     // If its not actually an nth degree polynomial because the x^n term is 0,
     // then recursiely apply the method on the actual (n-1)th degree polynomial
     if final_term == "0" {
         var new_poly []*big.Int
-        for i := 0; i <= degree - 2; i++ {
+        for i := 0; i <= degree - 1;  i++ {
             new_poly = append(new_poly, p.coefficients[i])
         }
         p = polynomial{new_poly}
         return p.format()
     }
 
+    // From here we can assume the polynomial is at least degree 2.
     str := ""
-    // The const term is always non-zero, otherwise add logic for this case
-    constant_term := p.coefficients[0].String()
-    if constant_term != "0" {
-        str = " + " + constant_term
+
+    if const_term != "0" {
+        str = " + " + const_term
     }
 
     // x term of polynomial
-    x_term := p.coefficients[1].String()
     switch x_term {
         case "0":
         case "1":
@@ -61,7 +76,7 @@ func (p polynomial) format() string {
             str = " + " + x_term + "x" + str
     }
 
-    // middle part of polynomial
+    // middle part of polynomial (does nothing if degree 2)
     for i := 2; i < degree; i++ {
         coeff := p.coefficients[i].String()
         switch coeff {
@@ -84,36 +99,40 @@ func (p polynomial) format() string {
 	return str
 }
 
+// Generates a random polynomial with specified constant, degree and modulus
 // For SSS:
 // constant = secret to split up
-// degree (of polynomial) = shares to split up
-// modulus = PRIME for the field arithmetic
-//TODO: I should just have logic at the start saying degree has to ve >=
-func generateRandomPolynomial(constant *big.Int, degree, modulus int) polynomial {
-    var coeffs []*big.Int
-    coeffs = append(coeffs, constant)
+// degree of polynomial = # shares to split up
+// modulus = prime for the galois field arithmetic
+func generateRandomPolynomial(constant, modulus *big.Int, degree int) polynomial {
+
+    // Start with the (pre-selected) constant term of the polynomial
+    coefficients := []*big.Int{constant}
+
+    // Randomly select all the middle terms
 	for i := 1; i < degree; i++ {
-        num, err := rand.Int(rand.Reader, big.NewInt(PRIME))
+        num, err := rand.Int(rand.Reader, modulus)
         if err != nil {
             panic(err)
         }
-        coeffs = append(coeffs, num)
+        coefficients = append(coefficients, num)
     }
-    var number *big.Int
+
+    // Randomly select the final term and ensure it is non-zero so it is really
+    // a polynomial of the nth degree.
     for {
-        num, err := rand.Int(rand.Reader, big.NewInt(PRIME))
+        num, err := rand.Int(rand.Reader, modulus)
         if err != nil {
             panic(err)
         }
-        number = num
-        if number.Cmp(big.NewInt(0)) != 0 {
+
+        if num.Cmp(big.NewInt(0)) != 0 {
+            coefficients = append(coefficients, num)
             break
         }
     }
-    coeffs = append(coeffs, number)
-    p := polynomial{coeffs}
-    fmt.Println(p.format())
-    return polynomial{coeffs}
+
+    return polynomial{coefficients}
 }
 
 // Evaluates galois polynomial at x
@@ -121,127 +140,144 @@ func evaluatePolynomial(x, modulus *big.Int, p polynomial) *big.Int {
     degree := len(p.coefficients) - 1
     result := big.NewInt(0)
     term := big.NewInt(0)
-	for e := degree; e >= 0; e-- {
-        term.Exp(x, big.NewInt(int64(e)), nil)
-        term.Mul(term, p.coefficients[e])
+	for n := 0; n <= degree; n++ {
+        // x^n mod m
+        term.Exp(x, big.NewInt(int64(n)), modulus)
+
+        // a_n * x^n
+        term.Mul(term, p.coefficients[n])
+
+        // Add together all the terms
         result.Add(result, term)
     }
     return result.Mod(result, modulus)
 }
 
-// Shamir Secret Sharing splitting secret into n shares with threshold t to
-// recover the secret.
-// TODO: test this function.. perhaps a hidden version with a fixed polynomial for
-// better end-to-end testing? Then the real version generates a random
-// polynomial and just calls the fixed polynomial version
-func shamirSplitSecret(secret *big.Int, n, t int) []*big.Int {
+// Used for testing and in the call to shamirSplitSecret. Not secure to call
+// directly unless the polynomial is generated with generateRandomPolynomial.
+func _shamirSplitSecretwithFixedPolynomial(secret, modulus *big.Int, poly polynomial, n, t int) []*big.Int {
     var shares []*big.Int
-    // TODO: make this a fixed polynomial for initial testing
-    poly := generateRandomPolynomial(secret, t - 1, PRIME)
-    fmt.Printf("The Shamir polynomial is: %s (mod %d)\n", poly.format(), PRIME)
+    fmt.Printf("The Shamir polynomial is: %s (mod %d)\n", poly.format(), modulus)
     fmt.Printf("The individual shares are:\n")
-    for x := 1; x <= t; x ++ {
-        // TODO: my PRIME should itself be a big.Int already, really.
-        // I really do not like casting of x crap we're doing here
-        shares = append(shares, evaluatePolynomial(big.NewInt(int64(x)), big.NewInt(PRIME), poly))
+    for x := 1; x <= n; x ++ {
+        shares = append(shares, evaluatePolynomial(big.NewInt(int64(x)), modulus, poly))
         fmt.Printf("Person %d: share: (%d, %d)\n", x, x, shares[x - 1])
     }
     fmt.Println(shares)
     return shares
 }
 
+// Shamir Secret Sharing splitting secret into n shares with threshold t to
+// recover the secret.
+func shamirSplitSecret(secret, modulus *big.Int, n, t int) []*big.Int {
+    poly := generateRandomPolynomial(secret, modulus, t - 1)
+    return _shamirSplitSecretwithFixedPolynomial(secret, modulus, poly, n, t)
+}
 
-// Calculates f(0) % p gien points when len(points) >= threshold
+// Calculates f(0) (mod m) given len(points) == treshhold
 // Points are the secret shares (x1, y1), (x2, y2), etc on the polynomial.
-func lagrange(points map[int]big.Int, modulus *big.Int) int {
+func lagrange(points map[int]big.Int, modulus *big.Int) *big.Int {
     result := big.NewInt(0)
-    k := len(points)
-
 
     // This part is the outer sum of the Lagrange formula. At each iteration, it
-    // adds the y term to the product. The product is calculated in the other
+    // adds the y * product term. The product is calculated in the other
     // inner loop.
     for x, y := range points {
-        prod := big.NewInt(1)
 
-        // At each iteration, this calculates the product in the Lagrange
-        // formula.
-        for m, _ in range points {
+        // Calculate the product to multiply against the y term.
+        prod := big.NewInt(1)
+        for m, _ := range points {
             if m == x {
                 continue
             }
-            d := big.NewInt(0).sub(m, x)
-            frac := big.NewInt(0).div(m, d)
-            prod.Mul(prod, frac)
+            d := new(big.Int).Sub(big.NewInt(int64(m)), big.NewInt(int64(x)))
+            d.ModInverse(d, modulus)
+            d.Mul(big.NewInt(int64(m)), d)
+            prod.Mul(prod, d)
+            prod.Mod(prod, modulus)
         }
 
-        // We now have the product for this term in the sum. Multiply it by y.
-        // Then add to the sum total. Repeat until the sum is complete.
-
-        // TODO: add print statements to test this stuff
-        term := big.NewInt(0).Mul(y, prod)
-        result = result.add(result, term)
-
-
-        frac.Div()
-        term.Mul(term
-        fmt.Printf("Intermediate calculuation is %i * %i = %i", a, b, c)
+        // Multiply the product by y and then add to the sum total.
+        // Repeat until the sum is complete.
+        term := new(big.Int).Mul(&y, prod)
+        result = result.Add(result, term)
     }
-    return result
+
+    return result.Mod(result, modulus)
 }
 
-// TODO: make the function say "Welcome to Shamir's secret sharing scheme! What
-// is your secret you wish to split?
-// logic says it must be an int, if not, re-prompt the user.
-// Next, it asks how many shares you want to split it into (n)
-// again, must be an int, obviously.
-// Next, ask the user for the threshold int.
+// TODO: maybe this should just work on ints only.
+// Write tests... write these better too probably
+func stringToBigInt(s string) (*big.Int, error) {
+    encoded := base64.StdEncoding.EncodeToString([]byte(s))
+    data, err := base64.StdEncoding.DecodeString(encoded)
+    if err != nil {
+        return nil, err
+    }
+    i := new(big.Int)
+    i.SetBytes(data)
+    return i, nil
+}
 
-// in future, hae a command line option too.
+// TODO: make cleaner, error handling
+func bigIntToString(i *big.Int) (string) {
+    data := i.Bytes()
+    s := base64.StdEncoding.EncodeToString(data)
+    q, _ := base64.StdEncoding.DecodeString(s)
+    return string(q)
+}
+
 func main() {
-    fmt.Println("Welcome to Shamir's secret sharing scheme!\n What is the secret (in integer form) you would like to split?")
-    // TODO: logic to ensure its an integer, parsed as big.Int
-    fmt.Println("How many shares of the secret would you like to split it into?")
-    // TODO: logic to ensure is int
-    fmt.Println("What is the threshold of shares needed to combine to derive the secret?")
+    // 2**127 - 1
+    PRIME := big.NewInt(2)
+    PRIME.Exp(PRIME, big.NewInt(127), nil)
+    PRIME.Sub(PRIME, big.NewInt(1))
+    fmt.Println("The prime is: ", PRIME)
 
+    splitCmd := flag.NewFlagSet("split", flag.ExitOnError)
+    splitSecret := splitCmd.String("secret", "", "Secret to split")
+    splitn := splitCmd.Int("n", 0, "Number of shares to split secret into")
+    splitthreshold := splitCmd.Int("t", 0, "Threshold needed to repiece together secret")
 
-    secret := big.NewInt(100)
-    people := 5
-    t := 3
-    shares := shamirSplitSecret(secret, people, t)
-    fmt.Println(shares)
+    combineCmd := flag.NewFlagSet("combine", flag.ExitOnError)
 
-
-    bigint := big.NewInt(123)
-    fmt.Println(bigint)
-
-	nBig, err := rand.Int(rand.Reader, big.NewInt(27))
-	if err != nil {
-		panic(err)
-	}
-
-
-	n := nBig.Int64()
-	fmt.Printf("Here is a random %T in [0,27) : %d\n", n, n)
-
-	letters := polynomial{[]*big.Int{big.NewInt(2), big.NewInt(4), big.NewInt(3), big.NewInt(0), big.NewInt(2)}}
-	fmt.Println(len([]int{1, 3, 4, 4, 4}))
-	fmt.Println(letters.format())
-
-
-    m := make(map[int]big.Int)
-	m[2] = *big.NewInt(1942)
-    for k, v := range m {
-        fmt.Println(k, "value is", v)
+    if len(os.Args) < 2 {
+        fmt.Println("expected 'split' or 'combine' subcommands")
+        os.Exit(1)
     }
 
-    x := big.NewInt(2)
-    modulus := big.NewInt(17)
-    result := evaluatePolynomial(x, modulus, letters)
-    fmt.Println(result)
+    switch os.Args[1] {
+        case "split":
+            splitCmd.Parse(os.Args[2:])
+            fmt.Println("subcommand 'split'")
+            fmt.Println("split secret", *splitSecret )
 
+            if *splitSecret == "" {
+                fmt.Println("Empty secret")
+                return
+            }
 
-    new_letters := generateRandomPolynomial(big.NewInt(11), 5, PRIME)
-    fmt.Println(new_letters.format())
+            secret, _ := stringToBigInt(*splitSecret)
+            fmt.Println("Secret is: ", secret)
+            shamirSplitSecret(secret, PRIME, *splitn, *splitthreshold)
+
+        case "combine":
+            combineCmd.Parse(os.Args[2:])
+            fmt.Println("subcommand 'combine'")
+            tail := combineCmd.Args()
+            fmt.Println("  tail:", len(tail))
+            points := make(map[int]big.Int)
+            for i := 0; i < len(tail) - 1; i = i + 2 {
+                x, _ := strconv.ParseInt(tail[i], 10, 64)
+                y, _ := new(big.Int).SetString(tail[i+1], 10)
+                points[int(x)] = *y
+            }
+            fmt.Println(points)
+            secret := lagrange(points, PRIME)
+            // TODO: Maybe just work on ints only?
+            fmt.Println(bigIntToString(secret))
+        default:
+            fmt.Println("Expected 'split' or 'combine' subcommands")
+            os.Exit(1)
+        }
 }
