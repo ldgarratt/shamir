@@ -11,9 +11,6 @@ import (
     "strconv"
 )
 
-// TODO: maybe split this up so main just does the shamir stuff, while the
-// polynomial manipulation is a separate package
-
 // A polynomial is a slice of big.Ints. polynomial[i] is the x^i coefficient.
 // E.g. 7x^2 + 5 is [5, 0, 7].
 type polynomial struct {
@@ -155,7 +152,7 @@ func evaluatePolynomial(x, modulus *big.Int, p polynomial) *big.Int {
 
 // Used for testing and in the call to shamirSplitSecret. Not secure to call
 // directly unless the polynomial is generated with generateRandomPolynomial.
-func _shamirSplitSecretwithFixedPolynomial(secret, modulus *big.Int, poly polynomial, n, t int) []*big.Int {
+func _shamirSplitSecretWithFixedPolynomial(secret, modulus *big.Int, poly polynomial, n, t int) []*big.Int {
     var shares []*big.Int
     fmt.Printf("The Shamir polynomial is: %s (mod %d)\n", poly.format(), modulus)
     fmt.Printf("The individual shares are:\n")
@@ -171,7 +168,7 @@ func _shamirSplitSecretwithFixedPolynomial(secret, modulus *big.Int, poly polyno
 // recover the secret.
 func shamirSplitSecret(secret, modulus *big.Int, n, t int) []*big.Int {
     poly := generateRandomPolynomial(secret, modulus, t - 1)
-    return _shamirSplitSecretwithFixedPolynomial(secret, modulus, poly, n, t)
+    return _shamirSplitSecretWithFixedPolynomial(secret, modulus, poly, n, t)
 }
 
 // Calculates f(0) (mod m) given len(points) == treshhold
@@ -208,12 +205,12 @@ func lagrange(points map[int]big.Int, modulus *big.Int) *big.Int {
 
 // TODO: maybe this should just work on ints only.
 // Write tests... write these better too probably
-func stringToBigInt(s string) (*big.Int, error) {
+func stringToBigInt(s string) *big.Int {
     return new(big.Int).SetBytes([]byte(s))
 }
 
 // TODO: make cleaner, error handling
-func bigIntToString(i *big.Int) (string) {
+func bigIntToString(i *big.Int) string {
     data := i.Bytes()
     s := base64.StdEncoding.EncodeToString(data)
     q, _ := base64.StdEncoding.DecodeString(s)

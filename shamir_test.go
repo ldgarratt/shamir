@@ -71,7 +71,7 @@ func Test_shamirSplitSecretwithFixedPolynomial(t *testing.T) {
     threshold := 3
     poly := polynomial{[]*big.Int{secret, big.NewInt(166), big.NewInt(94)}}
 
-    result := _shamirSplitSecretwithFixedPolynomial(secret, modulus, poly, n, threshold)
+    result := _shamirSplitSecretWithFixedPolynomial(secret, modulus, poly, n, threshold)
     expected := []*big.Int{big.NewInt(1494), big.NewInt(329), big.NewInt(965), big.NewInt(176), big.NewInt(1188), big.NewInt(775)}
 
     if len(expected) != len(result) {
