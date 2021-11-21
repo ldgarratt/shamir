@@ -2,11 +2,11 @@ package main
 
 import (
     "encoding/base64"
-	"crypto/rand"
+    "crypto/rand"
     "flag"
-	"fmt"
+    "fmt"
     "log"
-	"math/big"
+    "math/big"
     "os"
     "strconv"
 )

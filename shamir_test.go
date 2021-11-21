@@ -100,3 +100,6 @@ func TestLagrange(t *testing.T) {
         t.Errorf("Expecting %s, got: %s", expected, result)
     }
 }
+
+// TODO:
+// Add end-to-end test
