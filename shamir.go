@@ -209,14 +209,7 @@ func lagrange(points map[int]big.Int, modulus *big.Int) *big.Int {
 // TODO: maybe this should just work on ints only.
 // Write tests... write these better too probably
 func stringToBigInt(s string) (*big.Int, error) {
-    encoded := base64.StdEncoding.EncodeToString([]byte(s))
-    data, err := base64.StdEncoding.DecodeString(encoded)
-    if err != nil {
-        return nil, err
-    }
-    i := new(big.Int)
-    i.SetBytes(data)
-    return i, nil
+    return new(big.Int).SetBytes([]byte(s))
 }
 
 // TODO: make cleaner, error handling
@@ -257,7 +250,7 @@ func main() {
                 return
             }
 
-            secret, _ := stringToBigInt(*splitSecret)
+            secret := stringToBigInt(*splitSecret)
             fmt.Println("Secret is: ", secret)
             shamirSplitSecret(secret, PRIME, *splitn, *splitthreshold)
 
