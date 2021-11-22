@@ -183,8 +183,7 @@ func lagrange(points map[int]big.Int, modulus *big.Int) *big.Int {
     result := big.NewInt(0)
 
     // This part is the outer sum of the Lagrange formula. At each iteration, it
-    // adds the y * product term. The product is calculated in the other
-    // inner loop.
+    // adds the y * product term. The product is calculated in the inner loop.
     for x, y := range points {
 
         // Calculate the product to multiply against the y term.
@@ -215,8 +214,11 @@ func stringToBigInt(s string) *big.Int {
 func bigIntToString(i *big.Int) string {
     data := i.Bytes()
     s := base64.StdEncoding.EncodeToString(data)
-    q, _ := base64.StdEncoding.DecodeString(s)
-    return string(q)
+    res, err := base64.StdEncoding.DecodeString(s)
+    if err != nil {
+        panic("Decoding failed.")
+    }
+    return string(res)
 }
 
 func isASCII(s string) bool {
@@ -238,11 +240,11 @@ func validParameters(splitSecret *string, splitn, splitthreshold *int) bool {
         return false
     }
     if *splitn < 1 {
-        fmt.Println("Number of shares less than 1.\nSee README.md for example useage")
+        fmt.Println("Number of shares less than 1.\nSee README.md for example usage")
         return false
     }
     if *splitthreshold < 1 {
-        fmt.Println("Threshold less than 1.\nSee README.md for example useage")
+        fmt.Println("Threshold less than 1.\nSee README.md for example usage")
         return false
     }
     if *splitn < * splitthreshold {
@@ -365,8 +367,8 @@ func main() {
             tail := combineCmd.Args()
             m := createSubsecretSliceMap(tail)
             res := ""
-            for subsecretpuzzle := range(m) {
-                subsecret := lagrange(m[subsecretpuzzle], PRIME)
+            for _, subsecretpuzzle := range(m) {
+                subsecret := lagrange(subsecretpuzzle, PRIME)
                 res += bigIntToString(subsecret)
             }
             fmt.Println(res)

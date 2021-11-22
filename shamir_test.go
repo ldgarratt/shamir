@@ -3,6 +3,7 @@ package main
 import (
     "testing"
     "math/big"
+    "os"
 )
 
 func TestFormat(t *testing.T) {
@@ -125,6 +126,7 @@ func TestPairwiseJoinSlices(t *testing.T) {
     }
 
 }
+
 
 // TODO:
 // Add end-to-end test
