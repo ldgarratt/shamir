@@ -2,9 +2,6 @@
 
 Splits a secret into n parts with threshold t according to the SSS algorithm.
 
-This was mainly to practice implementing something crypto in Go. I make no
-claims about the actual security of this implementation :)
-
 ## Usage:
 
 To split e.g. secret = "Hello, World! This is my secret" between n = 6 people with threshold t = 4:
