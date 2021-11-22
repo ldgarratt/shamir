@@ -3,7 +3,6 @@ package main
 import (
     "testing"
     "math/big"
-    "os"
 )
 
 func TestFormat(t *testing.T) {
@@ -62,9 +61,27 @@ func TestEvaluatePolynomial(t *testing.T) {
     if result.Cmp(big.NewInt(17)) != 0 {
         t.Errorf("Expecting 17, got: %s", result.String())
     }
+
+    // Evaluate polynomial twice as different points to ensure it does not
+    // change when messing around with pointers.
+    p = polynomial{[]*big.Int{big.NewInt(1234), big.NewInt(166), big.NewInt(94)}}
+    modulus = big.NewInt(1613)
+
+    x = big.NewInt(0)
+    result = evaluatePolynomial(x, modulus, p)
+    if result.Cmp(big.NewInt(1234)) != 0 {
+        t.Errorf("Expecting 1234, got: %s", result.String())
+    }
+
+    x = big.NewInt(1)
+    result = evaluatePolynomial(x, modulus, p)
+    if result.Cmp(big.NewInt(1494)) != 0 {
+        t.Errorf("Expecting 1494, got: %s", result.String())
+    }
+
 }
 
-func Test_shamirSplitSecretwithFixedPolynomial(t *testing.T) {
+func Test_shamirSplitSecretWithFixedPolynomial(t *testing.T) {
     // Taken from https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing
     secret := big.NewInt(1234)
     modulus := big.NewInt(1613)
@@ -81,10 +98,11 @@ func Test_shamirSplitSecretwithFixedPolynomial(t *testing.T) {
 
     for i := 0; i < len(expected); i++ {
         if result[i].Cmp(expected[i]) != 0 {
-            t.Errorf("Expecting %s, got: %s", expected[i], result[i])
+            t.Errorf("Expecting %s at x=%d, got: %s", expected[i], i+1, result[i])
         }
     }
 }
+
 
 func TestLagrange(t *testing.T) {
     // Taken from https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing
@@ -121,8 +139,10 @@ func TestPairwiseJoinSlices(t *testing.T) {
     result = pairwiseJoinSlices(subsecret_shares)
     expected = []string{"321+117465", "701183+588", "15263+1207", "2574+1752", "417+48624"}
 
-    if (result[0] != expected[0])   {
-        t.Errorf("Expecting %s, got: %s", expected, result)
+    for i := 0; i < len(result); i++ {
+        if (result[0] != expected[0])   {
+            t.Errorf("Expecting %s, got: %s", expected, result)
+        }
     }
 
 }

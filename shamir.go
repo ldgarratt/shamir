@@ -14,7 +14,7 @@ import (
 )
 
 // 2**127 - 1.
-const PRIME_STRING = "170141183460469231731687303715884105727"
+const PRIME = "170141183460469231731687303715884105727"
 
 // Split large secrets into smaller ones to avoid wrapping around the prime
 // modulus during encoding. Given we only accept ASCII values, splitting into
@@ -142,23 +142,17 @@ func generateRandomPolynomial(constant, modulus *big.Int, degree int) polynomial
     return polynomial{coefficients}
 }
 
-// Evaluates galois polynomial at x
+// Evaluates galois polynomial at x using Horner's method.
 func evaluatePolynomial(x, modulus *big.Int, p polynomial) *big.Int {
     degree := len(p.coefficients) - 1
-    result := big.NewInt(0)
-    term := big.NewInt(0)
-	for n := 0; n <= degree; n++ {
-        // x^n mod m
-        term.Exp(x, big.NewInt(int64(n)), modulus)
-
-        // a_n * x^n
-        term.Mul(term, p.coefficients[n])
-
-        // Add together all the terms
-        result.Add(result, term)
+    result := new(big.Int).Set(p.coefficients[degree])
+    for i := degree - 1; i >= 0; i-- {
+        result.Mul(result, x)
+        result.Add(result, p.coefficients[i])
     }
     return result.Mod(result, modulus)
 }
+
 
 // Used for testing and in the call to shamirSplitSecret. Not secure to call
 // directly unless the polynomial is generated with generateRandomPolynomial.
@@ -328,7 +322,7 @@ func createSubsecretSliceMap(s []string) []map[int]big.Int {
 }
 
 func main() {
-    PRIME, _ := new(big.Int).SetString(PRIME_STRING, 10)
+    PRIME, _ := new(big.Int).SetString(PRIME, 10)
 
     splitCmd := flag.NewFlagSet("split", flag.ExitOnError)
     splitSecret := splitCmd.String("secret", "", "Secret to split")
@@ -343,6 +337,7 @@ func main() {
     }
 
     switch os.Args[1] {
+        // TODO: make go routine split/combine each subsecret for concurrency
         case "split":
             splitCmd.Parse(os.Args[2:])
             if !validParameters(splitSecret, splitn, splitthreshold) {
