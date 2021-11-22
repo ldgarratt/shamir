@@ -9,16 +9,17 @@ import (
     "math/big"
     "os"
     "strconv"
+    "strings"
     "unicode"
 )
 
-// 2**127 - 1. Cannot declare bigInts as consts to put the string here.
+// 2**127 - 1.
 const PRIME_STRING = "170141183460469231731687303715884105727"
 
 // Split large secrets into smaller ones to avoid wrapping around the prime
 // modulus during encoding. Given we only accept ASCII values, splitting into
-// chunks of size 15 is sufficent.
-const secret_split = 15
+// chunks of size 15 is sufficent to never be larger than our prime.
+const CHUNK_SIZE = 15
 
 // A polynomial is a slice of big.Ints. polynomial[i] is the x^i coefficient.
 // E.g. 7x^2 + 5 is [5, 0, 7].
@@ -27,6 +28,7 @@ type polynomial struct {
 }
 
 // Formats the polynomial so we can print e.g. [5, 0, 7] as 7x^2 + 5.
+// TODO: Was useful in debugging but not anymore.
 func (p polynomial) format() string {
 	degree := len(p.coefficients) - 1
 
@@ -106,7 +108,7 @@ func (p polynomial) format() string {
 }
 
 // Generates a random polynomial with specified constant, degree and modulus
-// For SSS:
+// For Shamir Secret Sharing:
 // constant = secret to split up
 // degree of polynomial = # shares to split up
 // modulus = prime for the galois field arithmetic
@@ -162,13 +164,9 @@ func evaluatePolynomial(x, modulus *big.Int, p polynomial) *big.Int {
 // directly unless the polynomial is generated with generateRandomPolynomial.
 func _shamirSplitSecretWithFixedPolynomial(secret, modulus *big.Int, poly polynomial, n, t int) []*big.Int {
     var shares []*big.Int
-    fmt.Printf("The Shamir polynomial is: %s (mod %d)\n", poly.format(), modulus)
-    fmt.Printf("The individual shares are:\n")
     for x := 1; x <= n; x ++ {
         shares = append(shares, evaluatePolynomial(big.NewInt(int64(x)), modulus, poly))
-        fmt.Printf("Person %d: share: (%d, %d)\n", x, x, shares[x - 1])
     }
-    fmt.Println(shares)
     return shares
 }
 
@@ -210,12 +208,10 @@ func lagrange(points map[int]big.Int, modulus *big.Int) *big.Int {
     return result.Mod(result, modulus)
 }
 
-// TODO: write tests
 func stringToBigInt(s string) *big.Int {
     return new(big.Int).SetBytes([]byte(s))
 }
 
-// TODO: make cleaner, error handling
 func bigIntToString(i *big.Int) string {
     data := i.Bytes()
     s := base64.StdEncoding.EncodeToString(data)
@@ -276,7 +272,7 @@ func splitStringIntoChunks(s string, n int) []string {
 }
 
 // Takes as input a slice of bigInt slices and pairwise combines them and
-// eturns a slice of strings.
+// returns a slice of strings.
 // We use this when splitting up a secret into individual subsecrets, shamir
 // splitting each one, then re-combining each share into a master share in a
 // useful string format for later parsing.
@@ -309,6 +305,26 @@ func pairwiseJoinSlices(a [][]*big.Int) []string {
     return res
 }
 
+// Given an input like ./shamir combine 2 334343+23232 4 32312321+2312312, this
+// will create a slice of maps like:
+// [[2: 334343, 4: 32312321], [2: 23232, 4: 2312312]]
+// Each map in the slice is itself a subsecret puzzle to solve with Lagrange.
+func createSubsecretSliceMap(s []string) []map[int]big.Int {
+    num_subsecrets := len(strings.Split(s[1], "+"))
+    res := make([]map[int]big.Int, num_subsecrets)
+    for i := 0; i < num_subsecrets; i++ {
+        subsecret_map := make(map[int]big.Int)
+        for j := 0; j < len(s); j += 2 {
+            x, _ := strconv.Atoi((s[j]))
+            y := new(big.Int)
+            y, _ = y.SetString(strings.Split(s[j+1], "+")[i], 10)
+            subsecret_map[x] = *y
+        }
+        res = append(res, subsecret_map)
+    }
+    return res
+}
+
 func main() {
     PRIME, _ := new(big.Int).SetString(PRIME_STRING, 10)
 
@@ -332,43 +348,28 @@ func main() {
             }
             fmt.Println("Secret to split:", *splitSecret )
 
-            // TODO: put this into a separate function
-            test_secret := splitStringIntoChunks(*splitSecret, secret_split)
+            secret := splitStringIntoChunks(*splitSecret, CHUNK_SIZE)
             var result [][]*big.Int
-            for _, subsecret := range test_secret {
+            for _, subsecret := range secret {
                 subsecret_int := stringToBigInt(subsecret)
                 subsecret_shares := shamirSplitSecret(subsecret_int, PRIME, *splitn, *splitthreshold)
                 result = append(result, subsecret_shares)
-                fmt.Println(len(result))
-                fmt.Println("yup")
             }
-            fmt.Println("wwwwww")
-            fmt.Println(result)
             shares := pairwiseJoinSlices(result)
-            fmt.Println(shares)
-            fmt.Println("zzzz")
-            fmt.Println(len(shares))
-            fmt.Println("where am i?")
             for i, _ := range(shares) {
-                fmt.Printf("Share %d: (%d, %s)", i+1, i+1, shares[i])
+                fmt.Printf("Share %d: (%d, %s)\n", i+1, i+1, shares[i])
             }
-            fmt.Println("where??")
-            fmt.Println(len(shares))
 
         case "combine":
             combineCmd.Parse(os.Args[2:])
-            fmt.Println("subcommand 'combine'")
             tail := combineCmd.Args()
-            fmt.Println("  tail:", len(tail))
-            points := make(map[int]big.Int)
-            for i := 0; i < len(tail) - 1; i = i + 2 {
-                x, _ := strconv.ParseInt(tail[i], 10, 64)
-                y, _ := new(big.Int).SetString(tail[i+1], 10)
-                points[int(x)] = *y
+            m := createSubsecretSliceMap(tail)
+            res := ""
+            for subsecretpuzzle := range(m) {
+                subsecret := lagrange(m[subsecretpuzzle], PRIME)
+                res += bigIntToString(subsecret)
             }
-            fmt.Println(points)
-            secret := lagrange(points, PRIME)
-            fmt.Println(bigIntToString(secret))
+            fmt.Println(res)
         default:
             fmt.Println("Expected 'split' or 'combine' subcommands")
             os.Exit(1)

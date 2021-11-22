@@ -102,9 +102,6 @@ func TestLagrange(t *testing.T) {
 }
 
 func TestPairwiseJoinSlices(t *testing.T) {
-// subsecret 1 shares: [23, 345]
-// subsecret 2 shares: [100, 99]
-// subsecret 3 shares: [19, 50]
     s1 := []*big.Int{big.NewInt(23), big.NewInt(345)}
     s2 := []*big.Int{big.NewInt(100), big.NewInt(99)}
     s3 := []*big.Int{big.NewInt(19), big.NewInt(50)}
@@ -115,7 +112,6 @@ func TestPairwiseJoinSlices(t *testing.T) {
     if (result[0] != expected[0]) || (result[1] != expected[1])  {
         t.Errorf("Expecting %s, got: %s", expected, result)
     }
-
 
     s1 = []*big.Int{big.NewInt(321), big.NewInt(701183), big.NewInt(15263), big.NewInt(2574), big.NewInt(417)}
     s2 = []*big.Int{big.NewInt(117465), big.NewInt(599), big.NewInt(1207), big.NewInt(1752), big.NewInt(40624)}
