@@ -144,24 +144,51 @@ func TestPairwiseJoinSlices(t *testing.T) {
 }
 
 func TestCreateSubsecretSliceMap(t *testing.T) {
-    s := []string{"2", "334343+23232", "4", "32312321+2312312"}
+    s := []string{"2", "334343", "4", "32312321"}
     result := createSubsecretSliceMap(s)
-
     m1 := map[int]big.Int{
         2 : *big.NewInt(334343),
         4 : *big.NewInt(32312321),
     }
+    expected := []map[int]big.Int{m1}
+    if len(expected) != len(result) {
+        t.Error("Expected slice length is %i, result length is %i", len(expected), len(result))
+    }
+    for i, elem := range(expected) {
+        if reflect.DeepEqual(expected[i], result[i]) == false {
+            t.Error("Slices are not the same. Expected %i, got %i", elem, result[i])
+        }
+    }
+
+    s = []string{"2", "334343+23232", "4", "32312321+2312312"}
+    result = createSubsecretSliceMap(s)
     m2 := map[int]big.Int{
         2 : *big.NewInt(23232),
         4 : *big.NewInt(2312312),
     }
-    expected := []map[int]big.Int{m1, m2}
+    expected = []map[int]big.Int{m1, m2}
     if len(expected) != len(result) {
         t.Error("Expected slice length is %i, result length is %i", len(expected), len(result))
     }
-    for i := 0; i < len(expected); i++ {
+    for i, elem := range(expected) {
         if reflect.DeepEqual(expected[i], result[i]) == false {
-            t.Error("Slices are not the same")
+            t.Error("Slices are not the same. Expected %i, got %i", elem, result[i])
+        }
+    }
+
+    s = []string{"2", "334343+23232+0", "4", "32312321+2312312+234"}
+    result = createSubsecretSliceMap(s)
+    m3 := map[int]big.Int{
+        2 : *big.NewInt(0),
+        4 : *big.NewInt(234),
+    }
+    expected = []map[int]big.Int{m1, m2, m3}
+    if len(expected) != len(result) {
+        t.Error("Expected slice length is %i, result length is %i", len(expected), len(result))
+    }
+    for i, elem := range(expected) {
+        if reflect.DeepEqual(expected[i], result[i]) == false {
+            t.Error("Slices are not the same. Expected %i, got %i", elem, result[i])
         }
     }
 }
