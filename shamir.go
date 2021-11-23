@@ -159,8 +159,8 @@ func validSplitParameters(splitSecret *string, splitn, splitthreshold *int) bool
         fmt.Println("Number of shares less than 1.\nSee README.md for example usage.")
         return false
     }
-    if *splitthreshold < 1 {
-        fmt.Println("Threshold less than 1.\nSee README.md for example usage.")
+    if *splitthreshold < 2 {
+        fmt.Println("Threshold less than 2.\nSee README.md for example usage.")
         return false
     }
     if *splitn < * splitthreshold {
@@ -172,7 +172,9 @@ func validSplitParameters(splitSecret *string, splitn, splitthreshold *int) bool
 
 // Splits a string into chunks, preserving order. Each substring will be size
 // n, except possibly the last which might be smaller.
-// E.g. for n = 3:"Hello, World" -> ["Hel", "Lo,", " Wo", "rld", "!"]
+// E.g. for n = 3:
+// Input: "Hello, World"
+// Returns: ["Hel", "Lo,", " Wo", "rld", "!"]
 // In Shamir Secret Sharing, we use this function to split a large secret into
 // smaller ones because otherwise secrets would wrap around the modulus after
 // encoding.
