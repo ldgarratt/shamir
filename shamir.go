@@ -9,8 +9,8 @@ import (
     "os"
     "strconv"
     "strings"
-    "unicode"
     "regexp"
+    "unicode"
 )
 
 // 2^127 - 1.
@@ -265,8 +265,6 @@ func validCombineParameters(s []string) bool {
     return true
 }
 
-// TODO: this is slightly wrong because it creates two empty maps inside the
-// array
 // Given an input like ./shamir combine 2 334343+23232 4 32312321+2312312, this
 // will create a slice of maps like:
 // [[2: 334343, 4: 32312321], [2: 23232, 4: 2312312]]
@@ -309,10 +307,12 @@ func main() {
             if !validSplitParameters(splitSecret, splitn, splitthreshold) {
                 os.Exit(1)
             }
+
             fmt.Println("Secret to split:", *splitSecret )
 
             secret := splitStringIntoChunks(*splitSecret, CHUNK_SIZE)
             var result [][]*big.Int
+
             for _, subsecret := range secret {
                 subsecret_int := stringToBigInt(subsecret)
                 subsecret_shares := shamirSplitSecret(subsecret_int, PRIME, *splitn, *splitthreshold)
