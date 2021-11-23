@@ -28,6 +28,15 @@ type polynomial struct {
 	coefficients []*big.Int
 }
 
+// When we split up a secret into subsecrets, we parraleize the SSS computation
+// on each. Since we do not know what order they will finish, we need an id
+// identifying the subsecret that has been split up. As the goroutines finish,
+// we insert the shares into the final result in the correct order.
+type pair struct{
+    shares []*big.Int
+    id int
+}
+
 // Generates a random polynomial with specified constant, degree and modulus
 // For Shamir Secret Sharing:
 // constant = secret to split up
@@ -287,6 +296,14 @@ func createSubsecretSliceMap(s []string) []map[int]big.Int {
     return res
 }
 
+// A goroutine to split each subsecret with SSS
+func splitSubsecret(c chan pair, chan_id int, subsecret string, n, t int, modulus *big.Int) {
+    subsecret_int := stringToBigInt(subsecret)
+    subsecret_shares := shamirSplitSecret(subsecret_int, modulus, n, t)
+    x := pair{subsecret_shares, chan_id}
+    c <- x
+}
+
 func main() {
     PRIME, _ := new(big.Int).SetString(PRIME, 10)
 
@@ -303,7 +320,6 @@ func main() {
     }
 
     switch os.Args[1] {
-        // TODO: make go routine split/combine each subsecret for concurrency
         case "split":
             splitCmd.Parse(os.Args[2:])
             if !validSplitParameters(splitSecret, splitn, splitthreshold) {
@@ -313,13 +329,26 @@ func main() {
             fmt.Println("Secret to split:", *splitSecret )
 
             secret := splitStringIntoChunks(*splitSecret, CHUNK_SIZE)
-            var result [][]*big.Int
+            num_subsecrets := len(secret)
+            result := make([][]*big.Int, num_subsecrets, num_subsecrets)
+            c := make(chan pair)
 
-            for _, subsecret := range secret {
-                subsecret_int := stringToBigInt(subsecret)
-                subsecret_shares := shamirSplitSecret(subsecret_int, PRIME, *splitn, *splitthreshold)
-                result = append(result, subsecret_shares)
+            for i, subsecret := range secret {
+                go splitSubsecret(c, i, subsecret, *splitn, *splitthreshold, PRIME)
             }
+
+            // We launched goroutines for each subsecret. Output to the channel
+            // is tagged with the index it should be inserted to. Once we have
+            // all the subsecret solutions, stop and print output.
+            count := 0
+            for count < num_subsecrets {
+                select {
+                case output := <-c:
+                    result[output.id] = output.shares
+                    count++
+                    }
+            }
+
             shares := pairwiseJoinSlices(result)
             for i, _ := range(shares) {
                 fmt.Printf("Share %d: (%d, %s)\n", i+1, i+1, shares[i])
