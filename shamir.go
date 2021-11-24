@@ -32,9 +32,21 @@ type polynomial struct {
 // on each. Since we do not know what order they will finish, we need an id
 // identifying the subsecret that has been split up. As the goroutines finish,
 // we insert the shares into the final result in the correct order.
-type pair struct{
+type splitPair struct{
     shares []*big.Int
     id int
+}
+
+// Same as splitPair, but for when we combine a subsecret back together.
+type combinePair struct{
+    subsecret string
+    id int
+}
+
+// The (x, y) coordinates from our polynomials.
+type xyPair struct{
+    x int
+    y *big.Int
 }
 
 // Generates a random polynomial with specified constant, degree and modulus
@@ -83,13 +95,26 @@ func evaluatePolynomial(x, modulus *big.Int, p polynomial) *big.Int {
     return result.Mod(result, modulus)
 }
 
+func evaluatePolynomialThroughChannel(c chan xyPair, chan_id int, modulus *big.Int, p polynomial) {
+    x := big.NewInt(int64(chan_id))
+    y := evaluatePolynomial(x, modulus, p)
+    c <- xyPair{chan_id, y}
+}
+
 // Used for testing and in the call to shamirSplitSecret. Not secure to call
 // directly unless the polynomial is generated with generateRandomPolynomial.
 func _shamirSplitSecretWithFixedPolynomial(secret, modulus *big.Int, poly polynomial, n, t int) []*big.Int {
-    var shares []*big.Int
-    for x := 1; x <= n; x ++ {
-        shares = append(shares, evaluatePolynomial(big.NewInt(int64(x)), modulus, poly))
+    shares := make([]*big.Int, n, n)
+    c := make(chan xyPair)
+    for x := 1; x <= n; x++ {
+        go evaluatePolynomialThroughChannel(c, x, modulus, poly)
     }
+
+    for count := 0; count < n; count++ {
+        output := <-c
+        shares[output.x - 1] = output.y
+        }
+
     return shares
 }
 
@@ -155,24 +180,24 @@ func isASCII(s string) bool {
     return true
 }
 
-func validSplitParameters(splitSecret *string, splitn, splitthreshold *int) bool {
-    if *splitSecret == "" {
+func validSplitParameters(secret *string, n, t *int) bool {
+    if *secret == "" {
         fmt.Println("Empty secret.\nSee README.md for example usage.")
         return false
     }
-    if !isASCII(*splitSecret) {
+    if !isASCII(*secret) {
         fmt.Println("Secret must be ASCII.")
         return false
     }
-    if *splitn < 1 {
+    if *n < 1 {
         fmt.Println("Number of shares less than 1.\nSee README.md for example usage.")
         return false
     }
-    if *splitthreshold < 2 {
+    if *t < 2 {
         fmt.Println("Threshold less than 2.\nSee README.md for example usage.")
         return false
     }
-    if *splitn < * splitthreshold {
+    if *n < *t {
         fmt.Println("Number of shares is less than the threshold.")
         return false
     }
@@ -286,9 +311,16 @@ func createSubsecretSliceMap(s []string) []map[int]big.Int {
     for i := 0; i < num_subsecrets; i++ {
         subsecret_map := make(map[int]big.Int)
         for j := 0; j < len(s); j += 2 {
-            x, _ := strconv.Atoi((s[j]))
+            x, err := strconv.Atoi((s[j]))
+            if err != nil {
+                panic("String to int conversion failed.")
+            }
+
             y := new(big.Int)
-            y, _ = y.SetString(strings.Split(s[j+1], "+")[i], 10)
+            y, success := y.SetString(strings.Split(s[j+1], "+")[i], 10)
+            if success == false {
+                panic("SetString failed.")
+            }
             subsecret_map[x] = *y
         }
         res = append(res, subsecret_map)
@@ -297,20 +329,75 @@ func createSubsecretSliceMap(s []string) []map[int]big.Int {
 }
 
 // A goroutine to split each subsecret with SSS
-func splitSubsecret(c chan pair, chan_id int, subsecret string, n, t int, modulus *big.Int) {
+func splitSubsecret(c chan splitPair, chan_id int, subsecret string, n, t int, modulus *big.Int) {
     subsecret_int := stringToBigInt(subsecret)
     subsecret_shares := shamirSplitSecret(subsecret_int, modulus, n, t)
-    x := pair{subsecret_shares, chan_id}
-    c <- x
+    c <- splitPair{subsecret_shares, chan_id}
 }
 
-func main() {
-    PRIME, _ := new(big.Int).SetString(PRIME, 10)
+// A goroutine to combine each subsecret with SSS
+func combineSubsecret(c chan combinePair, chan_id int, subsecretshares map[int]big.Int, modulus *big.Int) {
+    subsecret := lagrange(subsecretshares, modulus)
+    res := bigIntToString(subsecret)
+    c <- combinePair{res, chan_id}
+}
 
+func split(secret *string, n, t *int, PRIME *big.Int) {
+    if !validSplitParameters(secret, n, t) {
+        os.Exit(1)
+    }
+
+    fmt.Println("Secret to split:", *secret )
+
+    secret_chunks := splitStringIntoChunks(*secret, CHUNK_SIZE)
+    num_subsecrets := len(secret_chunks)
+    result := make([][]*big.Int, num_subsecrets, num_subsecrets)
+    c := make(chan splitPair)
+
+    for i, subsecret := range secret_chunks {
+        go splitSubsecret(c, i, subsecret, *n, *t, PRIME)
+    }
+
+    // We launched goroutines for each subsecret. Output to the channel
+    // is tagged with the index it should be inserted to. Once we have
+    // all the subsecret solutions, stop and print output.
+    for count := 0; count < num_subsecrets; count++ {
+        output := <-c
+        result[output.id] = output.shares
+    }
+
+    shares := pairwiseJoinSlices(result)
+    for i, _ := range(shares) {
+        fmt.Printf("Share %d: (%d, %s)\n", i+1, i+1, shares[i])
+    }
+}
+
+func combine(input []string, PRIME *big.Int) {
+    if !validCombineParameters(input) {
+        os.Exit(1)
+    }
+
+    m := createSubsecretSliceMap(input)
+    num_subsecrets := len(m)
+    secret := make([]string, num_subsecrets, num_subsecrets)
+    c := make(chan combinePair)
+    for i, subsecretShares := range(m) {
+        go combineSubsecret(c, i, subsecretShares, PRIME)
+    }
+
+    for count := 0; count < num_subsecrets; count++ {
+        output := <-c
+        secret[output.id] = output.subsecret
+    }
+
+    fmt.Println(strings.Join(secret, ""))
+}
+
+func parseArgs(PRIME *big.Int) {
     splitCmd := flag.NewFlagSet("split", flag.ExitOnError)
-    splitSecret := splitCmd.String("secret", "", "Secret to split.")
-    splitn := splitCmd.Int("n", 0, "Number of shares to split secret into.")
-    splitthreshold := splitCmd.Int("t", 0, "Threshold needed to repiece together secret.")
+    secret := splitCmd.String("secret", "", "Secret to split.")
+    n := splitCmd.Int("n", 0, "Number of shares to split secret into.")
+    t := splitCmd.Int("t", 0, "Threshold needed to repiece together secret.")
 
     combineCmd := flag.NewFlagSet("combine", flag.ExitOnError)
 
@@ -322,53 +409,24 @@ func main() {
     switch os.Args[1] {
         case "split":
             splitCmd.Parse(os.Args[2:])
-            if !validSplitParameters(splitSecret, splitn, splitthreshold) {
-                os.Exit(1)
-            }
-
-            fmt.Println("Secret to split:", *splitSecret )
-
-            secret := splitStringIntoChunks(*splitSecret, CHUNK_SIZE)
-            num_subsecrets := len(secret)
-            result := make([][]*big.Int, num_subsecrets, num_subsecrets)
-            c := make(chan pair)
-
-            for i, subsecret := range secret {
-                go splitSubsecret(c, i, subsecret, *splitn, *splitthreshold, PRIME)
-            }
-
-            // We launched goroutines for each subsecret. Output to the channel
-            // is tagged with the index it should be inserted to. Once we have
-            // all the subsecret solutions, stop and print output.
-            count := 0
-            for count < num_subsecrets {
-                select {
-                case output := <-c:
-                    result[output.id] = output.shares
-                    count++
-                    }
-            }
-
-            shares := pairwiseJoinSlices(result)
-            for i, _ := range(shares) {
-                fmt.Printf("Share %d: (%d, %s)\n", i+1, i+1, shares[i])
-            }
+            split(secret, n, t, PRIME)
 
         case "combine":
             combineCmd.Parse(os.Args[2:])
-            tail := combineCmd.Args()
-            if !validCombineParameters(tail) {
-                os.Exit(1)
-            }
-            m := createSubsecretSliceMap(tail)
-            res := ""
-            for _, subsecretpuzzle := range(m) {
-                subsecret := lagrange(subsecretpuzzle, PRIME)
-                res += bigIntToString(subsecret)
-            }
-            fmt.Println(res)
+            input := combineCmd.Args()
+            combine(input, PRIME)
+
         default:
             fmt.Println("Expected 'split' or 'combine' subcommands. See README.md for example usage.")
             os.Exit(1)
         }
+}
+
+func main() {
+    PRIME, success := new(big.Int).SetString(PRIME, 10)
+    if success == false {
+        panic("Failed to parse prime.")
+    }
+
+    parseArgs(PRIME)
 }
