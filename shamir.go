@@ -32,19 +32,19 @@ type polynomial struct {
 // on each. Since we do not know what order they will finish, we need an id
 // identifying the subsecret that has been split up. As the goroutines finish,
 // we insert the shares into the final result in the correct order.
-type splitPair struct{
+type splitPair struct {
     shares []*big.Int
     id int
 }
 
 // Same as splitPair, but for when we combine a subsecret back together.
-type combinePair struct{
+type combinePair struct {
     subsecret string
     id int
 }
 
 // The (x, y) coordinates from our polynomials.
-type xyPair struct{
+type xyPair struct {
     x int
     y *big.Int
 }
